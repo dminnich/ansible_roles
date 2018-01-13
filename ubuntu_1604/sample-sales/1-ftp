@@ -1,0 +1,11 @@
+---
+
+- hosts: all
+  vars:
+    csv_data: "{{ lookup('file', '1-ftp-users') }}"
+    csv_file: sample-sales/1-ftp-users
+    ssl_server_certs:
+    - ftpd
+  roles:
+    - ca
+    - ftpd

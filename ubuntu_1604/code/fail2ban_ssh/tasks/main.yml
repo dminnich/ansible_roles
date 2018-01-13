@@ -1,0 +1,45 @@
+---
+- name: install fail2ban and some other stuff
+  apt:
+    name: "{{ item }}"
+  with_items:
+  - fail2ban
+  - sysv-rc-conf
+  tags:
+  - install
+
+- name: open up firewall
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    policy: deny
+    state: enabled
+  with_items:
+    - "22"
+  tags:
+  - firewall
+
+- name: copy over configs
+  copy:
+     src: "{{ item.src }}" 
+     dest: "{{ item.dst }}" 
+     owner: root
+     group: root
+     mode: 0644
+     backup: yes
+  with_items:
+   - { src: 'jail.local', dst: '/etc/fail2ban/jail.local' }
+  tags:
+  - config
+
+- name: enable fail2ban
+  service:
+     name: "{{ item }}"
+     enabled: yes
+     state: started
+  with_items:
+  - fail2ban
+  - ufw
+  tags:
+  - install

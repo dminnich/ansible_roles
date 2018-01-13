@@ -1,0 +1,43 @@
+---
+- name: create folder
+  file:
+    path: /etc/ssl/myca
+    state: directory
+    mode: 0755
+  tags:
+  - ssl-config
+
+- name: copy config
+  copy:
+     src: openssl.cnf
+     dest: /etc/ssl/myca/openssl.cnf
+     owner: root
+     group: root
+     mode: 0644
+  tags:
+  - ssl-config
+
+- name: create aux files
+  shell: cd /etc/ssl/myca && touch index.txt && echo 1000 > serial && mkdir certs
+  args:
+    creates: /etc/ssl/myca/certs
+  tags:
+  - ssl-aux
+
+- name: create ca
+  shell: cd /etc/ssl/myca && openssl req -newkey rsa:4096 -new -days 3650 -nodes -sha256 -keyout myca.key -extensions v3_ca -subj "/CN=MyCA" -out myca.csr -extensions v3_ca -config openssl.cnf && openssl rsa -in myca.key -out myca-rsa.key && chmod 600 myca*.key && openssl ca -config openssl.cnf -extensions v3_ca -days 3650 -notext -md sha256 -in myca.csr -out myca.crt -keyfile myca.key -cert myca.crt -batch -selfsign
+  args:
+    creates: /etc/ssl/myca/myca.crt
+  tags:
+  - ssl-ca
+
+- name: server certs
+  shell: cd /etc/ssl/myca && openssl req -newkey rsa:4096 -keyout {{ item }}.key -new -sha256 -nodes -days 3650 -subj "/C=US/ST=Any/O=Any/CN={{ item }}" -reqexts SAN -config <(cat /etc/ssl/myca/openssl.cnf <(printf "[SAN]\nsubjectAltName=DNS:{{ item }},DNS:www.{{ item }}")) -out {{ item }}.csr && openssl rsa -in {{ item }}.key -out {{ item }}-rsa.key && chmod 600 {{ item }}*.key && openssl ca -config openssl.cnf -extensions v3_server -days 3650 -notext -md sha256 -in {{ item }}.csr -out {{ item }}.crt -keyfile myca.key -cert myca.crt -batch
+  args:
+    creates: /etc/ssl/myca/{{ item }}.crt
+    executable: /bin/bash
+  tags:
+  - ssl-server-certs
+  with_items:
+  - "{{ ssl_server_certs }}"
+

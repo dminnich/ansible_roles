@@ -1,0 +1,12 @@
+---
+
+- hosts: all
+  vars:
+    remote: false
+    ssl: false
+    csv_file: sample-sales/1-mysql-dbs
+    ssl_server_certs:
+    - mysql
+  roles:
+    - ca
+    - mysql

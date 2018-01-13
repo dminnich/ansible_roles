@@ -1,0 +1,55 @@
+---
+- name: install unattended-upgrades and some other stuff
+  apt:
+    name: "{{ item }}"
+  with_items:
+  - unattended-upgrades
+  - sysv-rc-conf
+  - aptitude
+  - cron
+  tags:
+  - install
+
+- name: do all updates
+  apt:
+   update_cache: yes
+   upgrade: safe
+  tags:
+  - updates
+
+- name: copy over configs
+  copy:
+     src: "{{ item.src }}" 
+     dest: "{{ item.dst }}" 
+     owner: root
+     group: root
+     mode: 0644
+     backup: yes
+  with_items:
+   - { src: '20auto-upgrades', dst: '/etc/apt/apt.conf.d/20auto-upgrades' }
+   - { src: '50unattended-upgrades', dst: '/etc/apt/apt.conf.d/50unattended-upgrades' }
+  tags:
+  - config
+
+- name: see if apt.disabled cron file exists
+  stat: 
+   path: /etc/cron.daily/apt.disabled
+  register: aptdisabled
+  tags:
+  - config
+
+- name: rename disabled cron file
+  shell: mv /etc/cron.daily/apt.disabled /etc/cron.daily/apt && chmod 755 /etc/cron.daily/apt
+  when: aptdisabled.stat.exists == True
+  tags:
+  - config
+
+- name: enable unattended-upgrades
+  service:
+     name: "{{ item }}"
+     enabled: yes
+     state: started
+  with_items:
+  - unattended-upgrades
+  tags:
+  - install

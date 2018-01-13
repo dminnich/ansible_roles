@@ -1,0 +1,200 @@
+---
+- name: install mysql
+  apt:
+    name: "{{ item }}"
+    update_cache: yes
+  with_items:
+  - mariadb-server
+  - mariadb-client
+  - python-mysqldb
+  - sysv-rc-conf
+  - haveged
+  tags:
+  - install
+
+- name: open up firewall 
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    policy: deny
+    state: enabled
+  with_items:
+    - "22"
+    - "3306"
+  tags:
+  - firewall
+  when: 
+  - remote
+
+- name: see if mysql root password isn't set
+  shell: X=$(mysql -u root -B -N -e "SELECT Password FROM mysql.user WHERE user='root';") LEN=$(echo $X | wc -c) && [[ $LEN -lt 2 ]]
+  args:
+    executable: /bin/bash
+  register: rootpwnotset
+  ignore_errors: yes
+  changed_when: False
+  tags:
+  - rootpw
+
+- name: generate a mysql root password
+  shell: < /dev/urandom tr -dc _A-Z-a-z-0-9 | head -c${1:-16};echo;
+  register: rootpw
+  changed_when: False
+  when:
+  - rootpwnotset|succeeded
+  tags:
+  - rootpw
+
+- name: set mysql root password
+  mysql_user:
+    name: root
+    password: "{{ rootpw.stdout }}"
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    update_password: always
+    check_implicit_admin: yes
+    login_user: root
+  when:
+  - rootpwnotset|succeeded
+  tags:
+  - rootpw
+  notify:
+  - restart mysql
+
+- name: print out mysql root password
+  debug: 
+    msg: "mysql root password is {{ rootpw.stdout }}"
+  when:
+  - rootpwnotset|succeeded
+  tags:
+  - rootpw
+
+- name: remove mysql anon accounts
+  mysql_user:
+    name: ''
+    host: localhost
+    state: absent
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+  tags:
+  - security
+
+- name: remove mysql anon accounts
+  mysql_user:
+    name: ''
+    host: '%'
+    state: absent
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+  tags:
+  - security
+
+- name: remove mysql remote root
+  mysql_user:
+    name: root
+    host: '%'
+    state: absent
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+  tags:
+  - security
+
+- name: remove mysql testdb
+  mysql_db:
+    name: test
+    state: absent
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+  tags:
+  - security
+
+- name: copy over configs that bind to all interfaces and require secure conections
+  copy:
+     src: 99-public.cnf
+     dest: /etc/mysql/mariadb.conf.d/99-public.cnf
+     owner: root
+     group: root
+     mode: 0644
+  notify:
+  - restart mysql
+  tags:
+  - config
+  when:
+  - ssl
+  - remote
+
+- name: get dblist
+  local_action: shell cat {{ csv_file }} | cut -d"," -f1
+  register: dblist
+  become: false
+  changed_when: False
+  tags: dbs
+
+- name: creating dbs
+  mysql_db:
+    name: "{{ item }}"
+    state: present
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+  with_items:
+  - "{{ dblist.stdout_lines }}"
+  tags: dbs
+
+- name: creating users and granting access to dbs
+  mysql_user:
+     name: "{{ lookup('csvfile', item + ' file={{ csv_file|basename }} col=0 delimiter=,') }}"
+     password: "{{ lookup('csvfile', item + ' file={{ csv_file|basename }} col=1 delimiter=,') }}"
+     priv: "{{ lookup('csvfile', item + ' file={{ csv_file|basename }} col=0 delimiter=,') }}.*:ALL"
+     update_password: on_create
+     state: present
+     login_unix_socket: /var/run/mysqld/mysqld.sock
+     login_user: root
+     host: localhost
+  with_items:
+  - "{{ dblist.stdout_lines }}"
+  tags: users
+  when: 
+  - not remote
+  - not ssl
+
+- name: creating users and granting access to dbs
+  mysql_user:
+     name: "{{ lookup('csvfile', item + ' file={{ csv_file|basename }} col=0 delimiter=,') }}"
+     password: "{{ lookup('csvfile', item + ' file={{ csv_file|basename }} col=1 delimiter=,') }}"
+     priv: "{{ lookup('csvfile', item + ' file={{ csv_file|basename }} col=0 delimiter=,') }}.*:ALL/*.*:REQUIRESSL"
+     update_password: on_create
+     state: present
+     login_unix_socket: /var/run/mysqld/mysqld.sock
+     login_user: root
+     host: '%'
+  with_items:
+  - "{{ dblist.stdout_lines }}"
+  tags: users
+  when: 
+  - remote
+  - ssl
+
+- name: set cert perms
+  file:
+    path: "{{ item }}"
+    mode: 0640
+    owner: root
+    group: mysql
+  with_items:
+  - /etc/ssl/myca/mysql-rsa.key
+  - /etc/ssl/myca/mysql.key
+  tags:
+  - ssl
+  when: 
+  - ssl
+
+- name: enable mysql at boot
+  service: 
+     name: "{{ item }}"
+     enabled: yes
+     state: started 
+  with_items:
+  - mysql
+  - haveged
+  tags:
+  - install

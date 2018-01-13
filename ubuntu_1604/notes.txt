@@ -1,0 +1,44 @@
+##setting up a test environment##
+sudo dpkg -i /home/sancho/Downloads/vagrant_1.9.7_x86_64.deb
+sudo vagrant plugin install vagrant-libvirt
+sudo vagrant init elastic/ubuntu-16.04-x86_64
+sudo virt-manager
+  create vagrant-libvirt2 network
+  192.168.122.0/24 dhcp disabled isolated network
+vim Vagrantfile
+   config.vm.network "private_network", ip: "192.168.122.241"
+sudo vagrant up --provider=libvirt
+ssh-copy-id vagrant@192.168.122.241
+
+#test run, pw is vagrant
+ansible-playbook -u vagrant -b -i 192.168.122.241, sample-sales/1-webdav -k
+subsetting tags -- run just install portion of mysql role which is tagged mysql
+ ansible-playbook -u vagrant -b -i 192.168.122.241, sample-sales/1-lamp -k --tags=mysql --tags=install
+
+##real run in digital ocean##
+ansible all -i IP, -m raw -a "apt-get update && apt-get -y install python" -u root
+ansible-playbook -i IP, sample-sales/1-openvpn -u root
+
+##notes taken durning intial role building##
+#ftpd
+pure-ftpd-wrapper --show-options
+
+#mysql
+http://databaseblog.myname.nl/2015/01/different-ssl-setups-for-mysql.html
+select User,Host,Password FROM mysql.user; - list all users
+show grants;  - current user
+SELECT user, host, password, select_priv, insert_priv, shutdown_priv, grant_priv FROM mysql.user; - show perms on mysql as a whole
+SELECT user, host, db, select_priv, insert_priv, grant_priv FROM mysql.db; - per db perms
+SHOW GRANTS FOR 'billy_com'@'%'; - per user perms on a per db basis
+SHOW VARIABLES LIKE '%ssl%'; -- only have_ssl matters
+mysql -u jimmy_com -h  192.168.122.241 -p --ssl-ca=/etc/ssl/myca/myca.crt
+mysql -u root -e "SELECT CONCAT(QUOTE(user),'@',QUOTE(host)) UserAccount FROM mysql.user;" -B -N | while read line; do mysql -u root -e "SHOW GRANTS FOR ${line};" -B -N; done
+
+CREATE USER 'example_com'@'%' IDENTIFIED BY  'test1234';
+GRANT ALL PRIVILEGES ON example_com.* TO 'example_com'@'%' identified by 'test1234' REQUIRE SSL;
+
+
+check ssl 
+mysql -u remote_user -p -h mysql_server_IP --ssl-mode=disabled
+\s
+ tcpdump -l -i eth0 -w - src or dst port 3306 | strings

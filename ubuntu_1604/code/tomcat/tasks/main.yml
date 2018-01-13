@@ -1,0 +1,123 @@
+---
+- name: install apache and tomcat
+  apt:
+    name: "{{ item }}"
+    update_cache: yes
+  with_items:
+  - apache2
+  - openjdk-8-jre
+  - openjdk-8-jdk
+  - tomcat8
+  - sysv-rc-conf
+  - haveged
+  tags:
+  - install
+
+- name: open up firewall 
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    policy: deny
+    state: enabled
+  with_items:
+    - "22"
+    - "80"
+    - "443"
+  tags:
+  - firewall
+
+- name: copy over apache configs
+  template:
+     src: tomcat.j2
+     dest: /etc/apache2/sites-available/tomcat.conf
+     owner: root
+     group: root
+     mode: 0644
+     backup: yes
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: copy over tomcat configs
+  template:
+     src: serverxml.j2
+     dest: /etc/tomcat8/server.xml
+     owner: root
+     group: tomcat8
+     mode: 0640
+     backup: yes
+  notify:
+  - restart tomcat
+  tags:
+  - config
+
+- name: copy over sample war
+  copy:
+     src: sample.war
+     dest: /var/lib/tomcat8/webapps/sample.war
+     owner: root
+     group: root
+     mode: 0644
+  notify:
+  - restart tomcat
+  tags:
+  - config
+
+- name: enable apache modules
+  apache2_module:
+      state: present
+      name: "{{ item }}"
+  with_items:
+  - proxy
+  - proxy_http
+  - proxy_ajp
+  - ssl
+  - headers
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: enable vhost site
+  file:
+      state: link
+      src: ../sites-available/tomcat.conf
+      dest: /etc/apache2/sites-enabled/tomcat.conf
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: remove default vhost site
+  file:
+      state: absent
+      path: /etc/apache2/sites-enabled/000-default.conf
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: set perms on cert
+  file:
+    owner: root
+    group: ssl-cert
+    mode: 0640
+    path: /etc/ssl/myca/{{ my_fqdn }}.crt
+  tags:
+  - ssl
+  notify:
+  - restart apache
+
+- name: enable services at boot
+  service: 
+     name: "{{ item }}"
+     enabled: yes
+     state: started 
+  with_items:
+  - apache2
+  - tomcat8
+  - haveged
+  tags:
+  - install

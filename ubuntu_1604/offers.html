@@ -1,0 +1,497 @@
+
+<p>For me to do this work for you, you will need to provide me with root or sudo root access via SSH to an Ubuntu 16.04 server.  This server must have a public IP address and ideally is running on top of a full virtualization stack (NOT OpenVZ, Docker, LXC). <a href="https://www.digitalocean.com/">Digital Ocean</a> , <a href="https://www.vultr.com/">Vultr</a>, and <a href="https://www.linode.com/">Linode</a> are top tier providers that offer these services at affordable prices. </p>
+
+<hr>
+
+
+
+<h1 id="offerings">Offerings</h1>
+
+
+
+<h2 id="openvpn">OpenVPN</h2>
+
+<p>Work around internet censorship and ISP throttled sites or surf securely on public wifi by tunneling all of your traffic over your very own VPN server.  </p>
+
+<p>For added security high quality ciphers, long length RSA keys and tls-auth is used.  Public non-logging DNS servers are also used while on the VPN by default.  </p>
+
+<p><strong>What I need from you:</strong></p>
+
+<ul>
+<li>IP, username and SSH port of server I will have root privileges on</li>
+<li>A list of vpn usernames</li>
+</ul>
+
+<p><strong>After the setup:</strong></p>
+
+<p>Connecting to the VPN:</p>
+
+<ol>
+<li>Download the profile  <br>
+<code>scp root@server:/root/*ovpn .</code> <br>
+or use  <a href="https://filezilla-project.org/">Filezilla</a> on Windows to download the files. </li>
+<li>Follow the guides at <a href="https://www.securevpn.pro/eng/setup">SecureVPN</a> for your devices but use the .ovpn you downloaded instead.  </li>
+</ol>
+
+<p>Adding additional users. </p>
+
+<pre><code>cd /etc/openvpn/easy-rsa/
+./easyrsa build-client-full username nopass
+cd ..
+./gen-client-config.sh username
+</code></pre>
+
+<p>Config file is under /root/</p>
+
+<p>Removing users</p>
+
+<pre><code> cd /etc/openvpn/easy-rsa/
+ ./easyrsa revoke username
+ ./easyrsa gen-crl
+ chmod 644 pki/crl.pem
+</code></pre>
+
+<p>Changing to a LetsEncrypt or some other public cert</p>
+
+<p>Don't do this.  OpenVPN authenticates users by issuing and revoking them certs. It does this by using a CA it maintains only for that purpose. </p>
+
+
+
+<h2 id="jenkins">Jenkins</h2>
+
+<p>Jenkins is the swiss army knife of IT automation.  </p>
+
+<p>Build your code and run tests against it.  Setup your own CI/CD pipeline and become a devops guru.  Or just use the graphical interface to help automate commonly repeatable tasks.  </p>
+
+<p>For added security and flexibility Jenkins is behind an Apache reverse proxy in my setup and Apache has its TLS configuration tuned to receive an "A" rating and for all traffic to be encrypted.  </p>
+
+<p><strong>What I need from you:</strong></p>
+
+<ul>
+<li>Fully Qualified Domain Name, username and SSH port of server you have given me root privileges on</li>
+<li>DNS record pointing at your server</li>
+</ul>
+
+<p><strong>After the setup:</strong></p>
+
+<p>Trusting the self-signed CA cert and accessing the site</p>
+
+<ol>
+<li>Copy the CA cert to your machine.  <br>
+<code>scp root@server:/etc/ssl/myca/myca.crt .</code> <br>
+or use  <a href="https://filezilla-project.org/">Filezilla</a> on Windows to download the file. </li>
+<li>Import the cert into your browsers trusted authorities and trust it for all actions.  Use the downloaded cert and not what is mentioned in the tutorials. <a href="https://wiki.wmtransfer.com/projects/webmoney/wiki/Installing_root_certificate_in_Mozilla_Firefox">Firefox</a> <a href="https://wiki.wmtransfer.com/projects/webmoney/wiki/Installing_root_certificate_in_Google_Chrome">Chrome</a><a href="https://www.youtube.com/watch?v=8sHeP4RR3tc">Windows</a></li>
+<li>Go to <a href="https://serverFQDN">https://serverFQDN</a></li>
+</ol>
+
+<p>Finishing the configuration</p>
+
+<pre><code>cat /var/lib/jenkins/secrets/initialAdminPassword  
+follow the onscreen steps. 
+choose continue as admin if one of the screens doesn't load
+</code></pre>
+
+<p>Hosting auxiliary content like build artifacts by Apache directly</p>
+
+<pre><code>edit /etc/apache2/sites-enabled/jenkins.conf replacing / with /jenkins/ and adding jenkins
+ProxyPass         /jenkins/  http://localhost:8080/jenkins/ nocanon
+ProxyPassReverse  /jenkins/  http://localhost:8080/jenkins/
+ProxyPassReverse  /jenkins/  http://example.com/jenkins/
+
+edit /etc/default/jenkins
+adding $PREFIX
+JENKINS_ARGS="--webroot=/var/cache/$NAME/war --httpPort=$HTTP_PORT --httpListenAddress=127.0.0.1 --prefix=$PREFIX"
+
+Manage Jenkins in GUI &gt; Configure System &gt; Jenkins URL &gt; https://example.com/jenkins/
+
+systemctl restart apache2
+systemctl restart jenkins
+
+Manage Jenkins at https://FQDN/jenkins/ shouldn't show a proxy error at the top
+https://FQDN should show the ubuntu splash page
+
+mkdir -p /var/www/html/data
+echo "hi" &gt; /var/www/html/data/test.txt
+https://FQDN/data/test.txt   should be your data
+</code></pre>
+
+<p>Moving to a LetsEncrypt or some other public CA cert <br>
+<a href="https://www.digitalocean.com/community/tutorials/how-to-secure-apache-with-let-s-encrypt-on-ubuntu-16-04">LetsEncrypt</a></p>
+
+<p><a href="https://www.ssls.com/">SSLs</a> <br>
+<a href="https://helpdesk.ssls.com/hc/en-us/articles/203427502-How-to-generate-a-CSR-code-on-Apache-Nginx-using-OpenSSL">Step 1</a> <br>
+<a href="https://helpdesk.ssls.com/hc/en-us/articles/203536171-Okay-so-I-ordered-an-SSL-How-do-I-get-it-to-work-on-my-domain-">Step 2</a> <br>
+[Step 3] Copy the files you got via email to your server <br>
+[Step 4] (<a href="https://helpdesk.ssls.com/hc/en-us/articles/203482651-How-to-install-a-SSL-certificate-on-Apache">https://helpdesk.ssls.com/hc/en-us/articles/203482651-How-to-install-a-SSL-certificate-on-Apache</a>) update /etc/apache2/sites-enabled/*.conf   SSLCertificateFile, SSLCertificateKeyFile, SSLCertificateChainFile options as specified on the page <br>
+[Step 5] systemctl restart apache2</p>
+
+
+
+<h2 id="tomcat">Tomcat</h2>
+
+<p>J2EE app servers and the code that runs on top of them are the hidden glue that makes the internals of most organizations tick.  They are also commonly used for complex websites.  </p>
+
+<p>Offer middleware services.  Learn java and host your creations here.  Find complex applications written by others online and run them.  </p>
+
+<p>For added security and flexibility Tomcat is behind an Apache reverse proxy in my setup and Apache has its TLS configuration tuned to receive an "A" rating and for all traffic to be encrypted. </p>
+
+<p><strong>What I need from you:</strong></p>
+
+<ul>
+<li>Fully Qualified Domain Name, username and SSH port of server you have given me root privileges on </li>
+<li>DNS record pointing at your server</li>
+</ul>
+
+<p><strong>After the setup:</strong></p>
+
+<p>Trusting the self-signed CA cert and accessing the site</p>
+
+<ol>
+<li>Copy the CA cert to your machine.  <br>
+<code>scp root@server:/etc/ssl/myca/myca.crt .</code> <br>
+or use  <a href="https://filezilla-project.org/">Filezilla</a> on Windows to download the file. </li>
+<li>Import the cert into your browsers trusted authorities and trust it for all actions.  Use the downloaded cert and not what is mentioned in the tutorials. <a href="https://wiki.wmtransfer.com/projects/webmoney/wiki/Installing_root_certificate_in_Mozilla_Firefox">Firefox</a> <a href="https://wiki.wmtransfer.com/projects/webmoney/wiki/Installing_root_certificate_in_Google_Chrome">Chrome</a><a href="https://www.youtube.com/watch?v=8sHeP4RR3tc">Windows</a></li>
+<li><a href="https://FQDN/sample/">https://FQDN/sample/</a></li>
+</ol>
+
+<p>Removing the sample app</p>
+
+<pre><code>vim /etc/apache2/sites-enabled/tomcat.conf
+comment out the ProxyPass lines it references
+ #    ProxyPass /sample/ http://127.0.0.1:8080/sample/
+ #    ProxyPassReverse /sample/ http://127.0.0.1:8080/sample/
+systemctl restart apache2
+rm -Rf /var/lib/tomcat8/webapps/sample.war
+</code></pre>
+
+<p>Deploying another app</p>
+
+<pre><code>vim /etc/apache2/sites-enabled/tomcat.conf
+add new ProxyPass lines for the context of the new app (usually its war file name). 
+ ProxyPass /gitblit/ http://127.0.0.1:8080/gitblit/
+ ProxyPassReverse /gitblit/ http://127.0.0.1:8080/gitblit/
+systemctl restart apache2
+cd /var/lib/tomcat8/webapps
+wget http://dl.bintray.com/gitblit/releases/gitblit-1.8.0.war -O gitblit.war
+Go to https://FQDN/gitblit/
+</code></pre>
+
+<p>Moving to a LetsEncrypt or some other public CA cert</p>
+
+<p><a href="https://www.digitalocean.com/community/tutorials/how-to-secure-apache-with-let-s-encrypt-on-ubuntu-16-04">LetsEncrypt</a></p>
+
+<p><a href="https://www.ssls.com/">SSLs</a> <br>
+<a href="https://helpdesk.ssls.com/hc/en-us/articles/203427502-How-to-generate-a-CSR-code-on-Apache-Nginx-using-OpenSSL">Step 1</a> <br>
+<a href="https://helpdesk.ssls.com/hc/en-us/articles/203536171-Okay-so-I-ordered-an-SSL-How-do-I-get-it-to-work-on-my-domain-">Step 2</a> <br>
+[Step 3] Copy the files you got via email to your server <br>
+[Step 4] (<a href="https://helpdesk.ssls.com/hc/en-us/articles/203482651-How-to-install-a-SSL-certificate-on-Apache">https://helpdesk.ssls.com/hc/en-us/articles/203482651-How-to-install-a-SSL-certificate-on-Apache</a>) update /etc/apache2/sites-enabled/*.conf   SSLCertificateFile, SSLCertificateKeyFile, SSLCertificateChainFile options as specified on the page <br>
+[Step 5] systemctl restart apache2</p>
+
+
+
+<h2 id="mariadb">MariaDB</h2>
+
+<p>An install of the highly capable and industry standard database.  Use it to store website content or anything else you can think of.  </p>
+
+<p>I can either install it so that it listens only on localhost or so that it listens on a public IP but requires encrypted TLS connections from its clients.  For additional security a random database root password is set, test database is dropped if it exists, any anon accounts are removed and database root remote connectivity is removed if it exists. </p>
+
+<p><strong>What I need from you:</strong></p>
+
+<ul>
+<li>IP, username and SSH port of server you have given me root privileges on </li>
+<li>Local or remotely reachable choice </li>
+<li>list of database names (doubles as user names) and passwords.  Each user is given full permissions to their database and nothing more.  Format of: <br>
+<code>jimmy_com,jimmypw <br>
+billy_com,billypw</code></li>
+</ul>
+
+<p><strong>After the setup:</strong></p>
+
+<p>Viewing databases while on server:</p>
+
+<pre><code>mysql -u root 
+show databases;
+</code></pre>
+
+<p>Viewing users while on server:</p>
+
+<pre><code>mysql -u root
+SELECT user, host, password FROM mysql.user;
+</code></pre>
+
+<p>Viewing all users and their permissions while on server:</p>
+
+<pre><code>mysql -u root -e "SELECT CONCAT(QUOTE(user),'@',QUOTE(host)) UserAccount FROM mysql.user;" -B -N | while read line; do mysql -u root -e "SHOW GRANTS FOR ${line};" -B -N; done
+</code></pre>
+
+<p>Creating a new database and user while on server</p>
+
+<pre><code>mysql -u root
+create database example_com;
+#remote usage
+CREATE USER 'example_com'@'%' IDENTIFIED BY 
+'test1234';
+GRANT ALL PRIVILEGES ON example_com.* TO 'example_com'@'%' identified by 'test1234' REQUIRE SSL;
+flush privileges;
+
+#local usage
+CREATE USER 'example_com'@'localhost' IDENTIFIED BY 'test1234';
+GRANT ALL PRIVILEGES ON example_com.* TO 'example_com'@'localhost' identified by 'test1234';
+flush privileges;
+</code></pre>
+
+<p>Removing a database and user on the server</p>
+
+<pre><code>mysql -u root
+drop database example_com;
+#remote usage
+DROP USER 'example_com'@'%';
+flush privileges;
+#local usage
+DROP USER 'example_com'@'localhost';
+flush privileges;
+</code></pre>
+
+<p>Connecting remotely over TLS</p>
+
+<pre><code>scp root@server:/etc/ssl/myca/myca.crt .
+mysql -u example_com -h serverip -p --ssl-ca=myca.crt
+#config files like so
+ssl-ca = myca.pem
+</code></pre>
+
+<p>Connecting locally</p>
+
+<pre><code>mysql -u example_com -h localhost -p
+</code></pre>
+
+<p>Changing to a LetsEncrypt or some other public CA cert <br>
+Don't do this.  The amount of machines connecting to your database should be small and having to copy a file over should be less messy than dealing with constant renewals.  I'd also suggest looking into doing TLS client auth so your users auth with a cert and a password. </p>
+
+
+
+<h2 id="ftp-server">FTP Server</h2>
+
+<p>Copy over your website, store backups, share data with friends, etc. </p>
+
+<p>An FTP server will allow you to easily upload and download files to/from your server from any device using a protocol that has been around since the dawn of the internet.   As an added bonus each FTP user will also be able to scp data to your server and ssh into your server if you change your ssh config to allow it or if it comes that way out of the box with your VPS provider.   </p>
+
+<p>For added security pure-ftpd is configured so that you can connect over TLS and so that unless you specify otherwise users are locked into their home directories.  </p>
+
+<p><strong>What I need from you:</strong></p>
+
+<ul>
+<li>IP, username and SSH port of server you have given me root privileges on  </li>
+<li>list of usernames, passwords and chroot option (lock user to home dir) <br>
+Format of: <br>
+<code>bill,test1234,false</code> <br>
+<code>jim,test1234,true</code></li>
+</ul>
+
+<p><strong>After the setup:</strong></p>
+
+<p>Connecting to the server:</p>
+
+<p>Follow <a href="https://www.youtube.com/watch?v=O3DudpEMPiY">this</a> but substitute your IP and credentials   </p>
+
+<p>Creating another user</p>
+
+<pre><code>useradd -m testuser -s /bin/bash
+passwd testuser
+</code></pre>
+
+<p>Removing a user</p>
+
+<pre><code>userdel -r testuser  
+#-r alos removes their home dir
+</code></pre>
+
+<p>Removing the chroot (home dir lock) from a user</p>
+
+<pre><code>usermod -a -G nonjailedftp testuser
+</code></pre>
+
+<p>Locking somebody to their home directory who currently isn"™t</p>
+
+<pre><code>gpasswd -d testuser nonjailedftp
+</code></pre>
+
+<p>Choosing what users can SSH in</p>
+
+<pre><code>vim /etc/ssh/sshd_config
+#if you want users to be able to login via password. Otherwise you will need to install their ssh keys for them
+PasswordAuthentication yes
+#list all the people you want to be able to ssh in
+AllowUsers root bill 
+systemctl restart sshd
+</code></pre>
+
+<p>Changing to a LetsEncrypt or some other public CA cert <br>
+Unless your FTP site is being used by tons of users it probably isn't worth doing.  You can tell your friend what cert to trust. <br>
+<a href="https://www.howtoforge.com/community/threads/letsencrypt-and-pure-ftpd.72000/">Rough guide</a></p>
+
+<p><a href="https://www.ssls.com/">SSLs</a> <br>
+<a href="https://helpdesk.ssls.com/hc/en-us/articles/203427502-How-to-generate-a-CSR-code-on-Apache-Nginx-using-OpenSSL">Step 1</a> <br>
+<a href="https://helpdesk.ssls.com/hc/en-us/articles/203536171-Okay-so-I-ordered-an-SSL-How-do-I-get-it-to-work-on-my-domain-">Step 2</a> <br>
+[Step 3] Copy the files you got via email to your server <br>
+[Step 4] cat server.key server.crt intermediateca.crt &gt; /etc/ssl/private/pure-ftpd.pem <br>
+[Step 5] systemctl restart pure-ftpd</p>
+
+
+
+<h2 id="lamp-multi-site">LAMP Multi-site</h2>
+
+<p>Run multiple dynamic sites like my-wordpress-blog.com and my-brothers-phpbb-forum.com all from the same server.  This setup features Apache, PHP and MaraiDB.  Databases and folder structures will be pre-created based on information you give me.  </p>
+
+<p>For added security Apache has its TLS configuration tuned to receive an "A" rating. And MariaDB is bound to localhost, has had its remote root connectivity and anon accounts removed.  </p>
+
+<p><strong>What I need from you:</strong></p>
+
+<ul>
+<li>Fully Qualified Domain Name, username and SSH port of server you have given me root privileges on </li>
+<li>DNS records pointing at your server</li>
+<li>list of database names (doubles as user names),  database passwords and site FQDNS.  Each user is given full permissions to their database and nothing more.  Format of: <br>
+<code>jimmy_com,jimmypw,jimmy.com <br>
+billy_com,billypw,billy.com</code></li>
+</ul>
+
+<p><strong>After the setup:</strong></p>
+
+<p>Trusting the self-signed CA cert and accessing the site</p>
+
+<ol>
+<li>Copy the CA cert to your machine.  <br>
+<code>scp root@server:/etc/ssl/myca/myca.crt .</code> <br>
+or use  <a href="https://filezilla-project.org/">Filezilla</a> on Windows to download the file. </li>
+<li>Import the cert into your browsers trusted authorities and trust it for all actions.  Use the downloaded cert and not what is mentioned in the tutorials. <a href="https://wiki.wmtransfer.com/projects/webmoney/wiki/Installing_root_certificate_in_Mozilla_Firefox">Firefox</a> <a href="https://wiki.wmtransfer.com/projects/webmoney/wiki/Installing_root_certificate_in_Google_Chrome">Chrome</a><a href="https://www.youtube.com/watch?v=8sHeP4RR3tc">Windows</a></li>
+<li><a href="https://FQDN1">https://FQDN1</a>  or <a href="https://FQDN2">https://FQDN2</a></li>
+</ol>
+
+<p>Creating a new cert, database, site</p>
+
+<pre><code>cd /etc/ssl/myca/
+openssl req -newkey rsa:4096 -keyout example.com.key -new -sha256 -nodes -days 3650 -subj "/C=US/ST=Any/O=Any/CN=example.com" -reqexts SAN -config &lt;(cat /etc/ssl/myca/openssl.cnf &lt;(printf "[SAN]\nsubjectAltName=DNS:example.com,DNS:www.example.com")) -out example.com.csr
+chmod 600 example.com.key
+openssl ca -config openssl.cnf -extensions v3_server -days 3650 -notext -md sha256 -in example.com.csr -out example.com.crt -keyfile myca.key -cert myca.crt -batch
+chown root:ssl-cert example.com.crt
+
+mysql -u root
+create database example_com;
+CREATE USER 'example_com'@'localhost' IDENTIFIED BY 'test1234';
+GRANT ALL PRIVILEGES ON example_com.* TO 'example_com'@'localhost' identified by 'test1234';
+flush privileges;
+quit
+
+mkdir -p /var/www/example.com/public_html
+chown -Rf www-data:www-data /var/www/example.com/
+cd /etc/apache2/sites-available/
+cp existing.com.conf example.com.conf
+vim example.com.conf
+#replace all instances of old domain with new domain in the file
+:%s/existing.com/example.com/g
+:wq!
+a2ensite example.com.conf
+systemctl restart apache2
+
+make sure DNS for the new site is pointed at your server, add content to /var/www/example.com/public_html  and visit example.com to see it
+</code></pre>
+
+<p>Different PHP applications require different php modules to function.  You can see what modules are installed by doing a <code>dpkg -l | grep php</code>.   You can find more by doing a <code>apt-cache search php</code> and install additional the one your application requires by doing a <code>apt-get install php-mbstring</code> or similar.  </p>
+
+<p>Application install example.  Follow your applications install instructions, this is just to prove the server setup is working.  I'm using the "jimmy" from the What I Need From You section in this example. </p>
+
+<pre><code>cd /var/www/jimmy.com/public_html/
+wget https://wordpress.org/latest.tar.gz
+tar xzvf latest.tar.gz
+https://jimmy.com/wordpress/ 
+#finish the install screens
+DB Name: jimmy_com
+User name: jimmy_com
+Password: jimmypw
+..keep the other defaults...
+
+copy the text in the "sorry I can't write" page
+vim wordpress/wp-config.php
+paste the text
+:wq
+
+Run the install
+Fill out the rest however you want, login create a blog entry then logout and view it
+</code></pre>
+
+<p>Deleting a cert, database, site</p>
+
+<pre><code>a2dissite example.com
+systemctl restart apache2
+
+#optionally, the following will delete all data associated with the site
+rm -Rf /etc/ssl/myca/example.com.* /etc/apache2/sites-available/example.com.conf /var/www/example.com/
+
+mysql -u root
+drop database example_com;
+DROP USER 'example_com'@'localhost';
+flush privileges;
+quit
+</code></pre>
+
+<p>Moving to a LetsEncrypt or some other public CA cert</p>
+
+<p><a href="https://www.digitalocean.com/community/tutorials/how-to-secure-apache-with-let-s-encrypt-on-ubuntu-16-04">LetsEncrypt</a></p>
+
+<p><a href="https://www.ssls.com/">SSLs</a> <br>
+<a href="https://helpdesk.ssls.com/hc/en-us/articles/203427502-How-to-generate-a-CSR-code-on-Apache-Nginx-using-OpenSSL">Step 1</a> <br>
+<a href="https://helpdesk.ssls.com/hc/en-us/articles/203536171-Okay-so-I-ordered-an-SSL-How-do-I-get-it-to-work-on-my-domain-">Step 2</a> <br>
+[Step 3] Copy the files you got via email to your server <br>
+[Step 4] (<a href="https://helpdesk.ssls.com/hc/en-us/articles/203482651-How-to-install-a-SSL-certificate-on-Apache">https://helpdesk.ssls.com/hc/en-us/articles/203482651-How-to-install-a-SSL-certificate-on-Apache</a>) update /etc/apache2/sites-enabled/*.conf   SSLCertificateFile, SSLCertificateKeyFile, SSLCertificateChainFile options as specified on the page <br>
+[Step 5] systemctl restart apache2</p>
+
+<h2 id="webdav-private-web-directory">WebDAV private web directory</h2>
+
+<p>Have a password protected file dump  part of your website where you and your friends share content.   </p>
+
+<p><strong>What I need from you:</strong></p>
+
+<ul>
+<li>Fully Qualified Domain Name, username and SSH port of server you have given me root privileges on </li>
+<li>DNS record pointing at your server</li>
+<li>list of webdav usernames and passwords  Format of: <br>
+<code>jimmy_com,jimmypw <br>
+billy_com,billypw</code></li>
+</ul>
+
+<p><strong>After the setup:</strong></p>
+
+<p>Trusting the self-signed CA cert and accessing the site</p>
+
+<ol>
+<li>Copy the CA cert to your machine.  <br>
+<code>scp root@server:/etc/ssl/myca/myca.crt .</code> <br>
+or use  <a href="https://filezilla-project.org/">Filezilla</a> on Windows to download the file. </li>
+<li>Import the cert into your browsers trusted authorities and trust it for all actions.  Use the downloaded cert and not what is mentioned in the tutorials. <a href="https://wiki.wmtransfer.com/projects/webmoney/wiki/Installing_root_certificate_in_Mozilla_Firefox">Firefox</a> <a href="https://wiki.wmtransfer.com/projects/webmoney/wiki/Installing_root_certificate_in_Google_Chrome">Chrome</a><a href="https://www.youtube.com/watch?v=8sHeP4RR3tc">Windows</a></li>
+<li><a href="https://FQDN/webdav/">https://FQDN/webdav/</a></li>
+</ol>
+
+<p>Connecting via webdav</p>
+
+<p><a href="https://brickftp.com/docs/tutorials/webdav/">This</a> is a great tutorial for multiple operating systems.  Just substitute <a href="https://server/webdav/">https://server/webdav/</a> as the path and a username and password you choose.  </p>
+
+<p>Creating another user</p>
+
+<pre><code>htpasswd /etc/apache2/.htpasswd testuser
+</code></pre>
+
+<p>Deleting a user</p>
+
+<pre><code>htpasswd -D /etc/apache2/.htpasswd testuser
+</code></pre>
+
+<p>Moving to a LetsEncrypt or some other public CA cert</p>
+
+<p><a href="https://www.digitalocean.com/community/tutorials/how-to-secure-apache-with-let-s-encrypt-on-ubuntu-16-04">LetsEncrypt</a></p>
+
+<p><a href="https://www.ssls.com/">SSLs</a> <br>
+<a href="https://helpdesk.ssls.com/hc/en-us/articles/203427502-How-to-generate-a-CSR-code-on-Apache-Nginx-using-OpenSSL">Step 1</a> <br>
+<a href="https://helpdesk.ssls.com/hc/en-us/articles/203536171-Okay-so-I-ordered-an-SSL-How-do-I-get-it-to-work-on-my-domain-">Step 2</a> <br>
+[Step 3] Copy the files you got via email to your server <br>
+[Step 4] (<a href="https://helpdesk.ssls.com/hc/en-us/articles/203482651-How-to-install-a-SSL-certificate-on-Apache">https://helpdesk.ssls.com/hc/en-us/articles/203482651-How-to-install-a-SSL-certificate-on-Apache</a>) update /etc/apache2/sites-enabled/*.conf   SSLCertificateFile, SSLCertificateKeyFile, SSLCertificateChainFile options as specified on the page <br>
+[Step 5] systemctl restart apache2</p>

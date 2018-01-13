@@ -1,0 +1,129 @@
+---
+- name: install apache and other items
+  apt:
+    name: "{{ item }}"
+    update_cache: yes
+  with_items:
+  - apache2
+  - sysv-rc-conf
+  - haveged
+  - php 
+  - libapache2-mod-php 
+  - php-mcrypt 
+  - php-mysql 
+  - php-cli
+  tags:
+  - install
+
+- name: open up firewall 
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    policy: deny
+    state: enabled
+  with_items:
+    - "22"
+    - "80"
+    - "443"
+  tags:
+  - firewall
+
+- name: get site list
+  local_action: shell cat {{ csv_file }} | cut -d"," -f3
+  register: sitelist
+  become: false
+  changed_when: False
+  tags: 
+  - sites
+
+- name: copy over apache configs
+  template:
+     src: site.j2
+     dest: "/etc/apache2/sites-available/{{ item }}.conf"
+     owner: root
+     group: root
+     mode: 0644
+     backup: yes
+  with_items:
+  - "{{ sitelist.stdout_lines }}"
+  notify:
+  - restart apache
+  tags:
+  - sites
+
+- name: create site dirs
+  file:
+   group: www-data
+   owner: www-data
+   mode: 0755
+   path: "/var/www/{{ item }}/public_html"
+   state: directory
+  with_items:
+  - "{{ sitelist.stdout_lines }}"
+  tags:
+  - sites
+
+- name: enable vhost sites
+  file:
+      state: link
+      src: "../sites-available/{{ item }}.conf"
+      dest: "/etc/apache2/sites-enabled/{{ item }}.conf"
+  with_items:
+  - "{{ sitelist.stdout_lines }}"
+  notify:
+  - restart apache
+  tags:
+  - sites
+
+- name: set perms on certs
+  file:
+    owner: root
+    group: ssl-cert
+    mode: 0640
+    path: "/etc/ssl/myca/{{ item }}.crt"
+  with_items:
+  - "{{ sitelist.stdout_lines }}"
+  tags:
+  - ssl
+  notify:
+  - restart apache
+
+- name: enable apache modules
+  apache2_module:
+      state: present
+      name: "{{ item }}"
+  with_items:
+  - ssl
+  - headers
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: remove default vhost site
+  file:
+      state: absent
+      path: /etc/apache2/sites-enabled/000-default.conf
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: remove apache splash
+  file:
+   path: /var/www/html/index.html
+   state: absent
+  tags: 
+  - config
+
+- name: enable services at boot
+  service: 
+     name: "{{ item }}"
+     enabled: yes
+     state: started 
+  with_items:
+  - apache2
+  - haveged
+  tags:
+  - install

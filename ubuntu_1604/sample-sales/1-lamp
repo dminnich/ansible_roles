@@ -1,0 +1,13 @@
+---
+
+- hosts: all
+  vars:
+    csv_data: "{{ lookup('file', '1-lamp-sites') }}"
+    csv_file: sample-sales/1-lamp-sites
+    ssl_server_certs:
+    - billy.com
+    - jimmy.com
+  roles:
+    - { role: ca, tags: ["ca"] }
+    - { role: mysql, remote: false, ssl: false, tags: ["mysql"] }
+    - { role: lamp, tags: ["lamp"] }

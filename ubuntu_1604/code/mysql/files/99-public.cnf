@@ -1,0 +1,14 @@
+[mysqld]
+# Require clients to connect either using SSL
+# or through a local socket file
+#require_secure_transport = ON
+bind-address = 0.0.0.0
+ssl
+ssl-ca=/etc/ssl/myca/myca.crt
+ssl-cert=/etc/ssl/myca/mysql.crt
+ssl-key=/etc/ssl/myca/mysql-rsa.key
+#from https://cipherli.st/
+#ssl-cipher=AES128+EECDH:AES128+EDH
+#https://mariadb.com/kb/en/mariadb/ssltls-system-variables/#ssl_cipher
+#ssl_cipher=TLSv1.2
+#debian using yassl instead of openssl sucks and means less secure

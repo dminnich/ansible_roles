@@ -1,0 +1,123 @@
+---
+- name: install apache and other items
+  apt:
+    name: "{{ item }}"
+    update_cache: yes
+  with_items:
+  - apache2
+  - sysv-rc-conf
+  - haveged
+  - python-passlib
+  tags:
+  - install
+
+- name: open up firewall 
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    policy: deny
+    state: enabled
+  with_items:
+    - "22"
+    - "80"
+    - "443"
+  tags:
+  - firewall
+
+- name: copy over apache configs
+  template:
+     src: webdav.j2
+     dest: /etc/apache2/sites-available/webdav.conf
+     owner: root
+     group: root
+     mode: 0644
+     backup: yes
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: enable apache modules
+  apache2_module:
+      state: present
+      name: "{{ item }}"
+  with_items:
+  - ssl
+  - headers
+  - dav
+  - dav_fs
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: enable vhost site
+  file:
+      state: link
+      src: ../sites-available/webdav.conf
+      dest: /etc/apache2/sites-enabled/webdav.conf
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: remove default vhost site
+  file:
+      state: absent
+      path: /etc/apache2/sites-enabled/000-default.conf
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: set perms on cert
+  file:
+    owner: root
+    group: ssl-cert
+    mode: 0640
+    path: /etc/ssl/myca/{{ my_fqdn }}.crt
+  tags:
+  - ssl
+  notify:
+  - restart apache
+
+- name: create webdav dir
+  file:
+   group: www-data
+   owner: www-data
+   mode: 0755
+   path: /var/www/html/webdav
+   state: directory
+
+- name: remove apache splash
+  file:
+   path: /var/www/html/index.html
+   state: absent
+
+- name: get userlist
+  local_action: shell cat {{ csv_file }} | cut -d"," -f1
+  register: userlist
+  become: false
+  changed_when: False
+  tags: users
+
+- name: creating users
+  htpasswd:
+     path: /etc/apache2/.htpasswd
+     name: "{{ lookup('csvfile', item + ' file={{ csv_file|basename }} col=0 delimiter=,') }}"
+     password: "{{ lookup('csvfile', item + ' file={{ csv_file|basename }} col=1 delimiter=,') }}"
+  with_items:
+  - "{{ userlist.stdout_lines }}"
+  tags: users
+
+- name: enable services at boot
+  service: 
+     name: "{{ item }}"
+     enabled: yes
+     state: started 
+  with_items:
+  - apache2
+  - haveged
+  tags:
+  - install

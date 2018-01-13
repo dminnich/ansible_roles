@@ -1,0 +1,10 @@
+---
+
+- hosts: all
+  vars:
+    my_fqdn: example.com
+    ssl_server_certs:
+    - example.com
+  roles:
+    - ca
+    - tomcat

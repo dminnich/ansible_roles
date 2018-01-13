@@ -1,0 +1,154 @@
+---
+- name: install openvpn and some other stuff
+  apt:
+    name: "{{ item }}"
+    update_cache: yes
+  with_items:
+  - openvpn
+  - sysv-rc-conf
+  - haveged
+  tags:
+  - install
+
+- name: install easy-rsa from gzip
+  unarchive:
+    src: EasyRSA-3.0.1.tgz
+    dest: /etc/openvpn
+    creates: /etc/openvpn/easy-rsa
+  tags:
+  - install
+
+- name: open up firewall 
+  ufw:
+    rule: allow
+    port: "{{ item.port }}"
+    proto: "{{ item.proto }}"
+    policy: deny
+    state: enabled
+  with_items:
+    - { port: '22', proto: 'tcp' }
+    - { port: '1194', proto: 'tcp' }
+    - { port: '1194', proto: 'udp' }
+  tags:
+  - firewall
+
+- name: open up firewall forward chain
+  ufw:
+    direction: routed
+    policy: allow
+  tags:
+  - firewall
+
+- name: sysctl ipv4_forward enable
+  lineinfile: dest=/etc/ufw/sysctl.conf regexp=^net/ipv4/ip_forward line=net/ipv4/ip_forward=1
+  notify: 
+  - restart ufw
+  tags:
+  - firewall
+
+- name: add postrouting rules to ufw
+  blockinfile:
+    dest: /etc/ufw/before.rules
+    insertbefore: BOF
+    block: |
+      # Nat table
+      *nat
+      :POSTROUTING ACCEPT [0:0]
+      # Nat rules
+      -F
+      -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j SNAT --to-source {{ansible_eth0.ipv4.address}}
+      COMMIT
+  notify: 
+  - restart ufw
+  tags:
+  - firewall
+
+- name: copy over openvpn vars configs
+  template:
+     src: vars.j2
+     dest: /etc/openvpn/easy-rsa/vars
+     owner: root
+     group: root
+     mode: 0644
+     backup: yes
+  tags:
+  - certs
+
+- name: copy over openvpn server and client config
+  template:
+     src: "{{ item.src }}" 
+     dest: "{{ item.dst }}"
+     owner: root
+     group: root
+     mode: "{{ item.mode }}"
+     backup: yes
+  with_items:
+  - { src: 'serverconf.j2', dst: '/etc/openvpn/server.conf', mode: '0644' }
+  - { src: 'clientconf.j2', dst: '/etc/openvpn/client-template', mode: '0644' }
+  - { src: 'gen-client-config.sh', dst: '/etc/openvpn/gen-client-config.sh', mode: '0755' }
+  notify: 
+  - restart openvpn
+  tags:
+  - config
+
+- name: generate dh params
+  shell: openssl dhparam -out /etc/openvpn/dh.pem 3072 
+  args:
+    creates: /etc/openvpn/dh.pem
+  tags:
+  - certs
+  - dh
+
+- name: generate ca and server cert
+  shell: cd /etc/openvpn/easy-rsa && ./easyrsa init-pki && chmod 755 /etc/openvpn/easy-rsa/pki && ./easyrsa build-ca nopass && ./easyrsa gen-crl && chmod 644 /etc/openvpn/easy-rsa/pki/crl.pem && ./easyrsa build-server-full server nopass
+  args:
+    creates: /etc/openvpn/easy-rsa/pki/issued/server.crt
+  tags:
+  - certs
+
+- name: generate tsl-auth psk
+  shell: openvpn --genkey --secret /etc/openvpn/easy-rsa/pki/tls-auth.key
+  args:
+    creates: /etc/openvpn/easy-rsa/pki/tls-auth.key
+  tags:
+  - certs
+
+- name: get userlist
+  local_action: shell cat {{ csv_file }} 
+  register: userlist
+  become: false
+  changed_when: False
+  tags:
+  - certs
+  - users
+
+- name: creating user certs
+  shell: cd /etc/openvpn/easy-rsa && ./easyrsa build-client-full {{ item }} nopass
+  args:
+    creates: /etc/openvpn/easy-rsa/pki/issued/{{ item }}.crt
+  with_items:
+  - "{{ userlist.stdout_lines }}"
+  tags:
+  - certs
+  - users
+
+- name: create client configs
+  shell: /etc/openvpn/gen-client-config.sh {{ item }}
+  args:
+    creates: /root/{{ item }}.ovpn
+  with_items:
+  - "{{ userlist.stdout_lines }}"
+  tags:
+  - users
+
+- name: enable services at boot
+  service: 
+     name: "{{ item }}"
+     enabled: yes
+     state: started 
+  with_items:
+  - openvpn
+  - openvpn@server
+  - haveged
+  tags:
+  - install

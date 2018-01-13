@@ -1,0 +1,124 @@
+---
+- name: trust jenkins gpg key
+  apt_key:
+    url: https://pkg.jenkins.io/debian/jenkins-ci.org.key
+  tags:
+  - install
+
+- name: add jenkins repo
+  apt_repository:
+    repo: deb http://pkg.jenkins.io/debian-stable binary/
+    state: present
+    filename: 'jenkins'
+  tags:
+  - install
+
+- name: install apache and jenkins
+  apt:
+    name: "{{ item }}"
+    update_cache: yes
+  with_items:
+  - apache2
+  - openjdk-8-jre
+  - openjdk-8-jdk
+  - jenkins
+  - sysv-rc-conf
+  - haveged
+  tags:
+  - install
+
+- name: open up firewall 
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    policy: deny
+    state: enabled
+  with_items:
+    - "22"
+    - "80"
+    - "443"
+  tags:
+  - firewall
+
+- name: copy over apache configs
+  template:
+     src: jenkins.j2
+     dest: /etc/apache2/sites-available/jenkins.conf
+     owner: root
+     group: root
+     mode: 0644
+     backup: yes
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: copy over jenkins configs
+  template:
+     src: jenkins-defaults.j2
+     dest: /etc/default/jenkins
+     owner: root
+     group: root
+     mode: 0644
+     backup: yes
+  notify:
+  - restart jenkins
+  tags:
+  - config
+
+- name: enable apache modules
+  apache2_module:
+      state: present
+      name: "{{ item }}"
+  with_items:
+  - proxy
+  - proxy_http
+  - ssl
+  - headers
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: enable vhost site
+  file:
+      state: link
+      src: ../sites-available/jenkins.conf
+      dest: /etc/apache2/sites-enabled/jenkins.conf
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: remove default vhost site
+  file:
+      state: absent
+      path: /etc/apache2/sites-enabled/000-default.conf
+  notify:
+  - restart apache
+  tags:
+  - config
+
+- name: set perms on cert
+  file:
+    owner: root
+    group: ssl-cert
+    mode: 0640
+    path: /etc/ssl/myca/{{ my_fqdn }}.crt
+  tags:
+  - ssl
+  notify:
+  - restart apache
+
+- name: enable services at boot
+  service: 
+     name: "{{ item }}"
+     enabled: yes
+     state: started 
+  with_items:
+  - apache2
+  - jenkins
+  - haveged
+  tags:
+  - install

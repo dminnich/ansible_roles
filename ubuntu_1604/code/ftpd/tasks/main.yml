@@ -1,0 +1,107 @@
+---
+- name: install pure-ftpd
+  apt:
+    name: "{{ item }}"
+    update_cache: yes
+  with_items:
+  - pure-ftpd
+  - sysv-rc-conf
+  - haveged
+  tags:
+  - install
+
+- name: open up firewall 
+  ufw:
+    rule: allow
+    port: "{{ item }}"
+    proto: tcp
+    policy: deny
+    state: enabled
+  with_items:
+    - "22"
+    - "20"
+    - "21"
+    - "2100:2200"
+  tags:
+  - firewall
+
+- name: backup original configs
+  shell: mv /etc/pure-ftpd/conf /etc/pure-ftpd/conf.orig
+  args:
+    creates: /etc/pure-ftpd/conf.orig
+  tags:
+  - config
+
+- name: copy over configs
+  copy:
+     src: conf
+     dest: /etc/pure-ftpd
+     owner: root
+     group: root
+     mode: 0644
+     backup: yes
+  notify:
+  - restart pure-ftpd
+  tags:
+  - config
+
+- name: create pure-ftpd readable cert chain
+  shell: cat /etc/ssl/myca/ftpd.key /etc/ssl/myca/ftpd.crt /etc/ssl/myca/myca.crt > /etc/ssl/private/pure-ftpd.pem && chmod 600 /etc/ssl/private/pure-ftpd.pem
+  args:
+    creates: /etc/ssl/private/pure-ftpd.pem
+  tags:
+  - ssl
+  notify:
+  - restart pure-ftpd
+
+- name: get userlist
+  local_action: shell cat {{ csv_file }} | cut -d"," -f1
+  register: userlist
+  become: false
+  changed_when: False
+  tags: users
+
+- name: get nonjailed userlist
+  local_action: shell cat {{ csv_file }} | awk -F "," '$3 == "true" {print $1}'
+  register: nonjaileduserlist
+  become: false
+  changed_when: False
+  tags: users
+
+- name: creating users
+  user:
+     name: "{{ lookup('csvfile', item + ' file={{ csv_file|basename }} col=0 delimiter=,') }}"
+     createhome: yes
+     shell: /bin/bash
+     password: "{{ lookup('csvfile', item + ' file={{ csv_file|basename }} col=1 delimiter=,')|password_hash('sha512') }}"
+     update_password: on_create
+     append: yes
+  with_items:
+  - "{{ userlist.stdout_lines }}"
+  tags: users
+
+- name: create nonjailed group
+  group:
+     gid: 2000
+     name: nonjailedftp
+  tags: users
+
+- name: putting nonjailed users in special group
+  user:
+     name: "{{ item }}"
+     append: yes
+     groups: nonjailedftp
+  with_items:
+  - "{{ nonjaileduserlist.stdout_lines }}"
+  tags: users
+
+- name: enable pure-ftpd at boot
+  service: 
+     name: "{{ item }}"
+     enabled: yes
+     state: started 
+  with_items:
+  - pure-ftpd
+  - haveged
+  tags:
+  - install
